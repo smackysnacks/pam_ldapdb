@@ -3,7 +3,7 @@ language: cpp
 compiler: gcc
 
 before_install:
-    - sudo apt-get install -qq pam-devel
+    - sudo apt-get install -qq libpam-dev
     - sudo apt-get install -qq libldap2-dev
 
 script: make
