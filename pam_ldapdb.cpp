@@ -18,7 +18,7 @@ static bool verify(const char* host, const char* binddn, const char* pw)
     LDAP* ld;
 
     if (ldap_initialize(&ld, host)) {
-        return 0;
+        return false;
     }
 
     int rc = ldap_simple_bind_s(ld, binddn, pw);
