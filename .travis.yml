@@ -1,10 +1,14 @@
 language: cpp
 
+sudo: false
+
 compiler: gcc
 
-before_install:
-    - sudo apt-get install -qq libpam-dev
-    - sudo apt-get install -qq libldap2-dev
+addons:
+  apt:
+    packages:
+      - libpam-dev
+      - libldap2-dev   
 
 script: make
 
