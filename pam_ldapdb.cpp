@@ -13,7 +13,9 @@
 typedef std::map<std::string, std::string> ArgMap;
 
 
-static bool verify(const char* host, const char* binddn, const char* pw)
+static bool verify(const char* host,
+                   const char* binddn,
+                   const char* pw)
 {
     LDAP* ld;
 
@@ -50,6 +52,17 @@ static ArgMap get_args(int argc,
 }
 
 
+static void replace_all(std::string& s,
+                        const std::string& search_s,
+                        const std::string& replace_s)
+{
+    std::string::size_type last_pos = 0;
+    while ((last_pos = s.find(search_s, last_pos)) != std::string::npos) {
+        s.replace(last_pos, search_s.length(), replace_s);
+    }
+}
+
+
 PAM_EXTERN int pam_sm_authenticate(pam_handle_t* pamh,
                                    int flags,
                                    int argc,
@@ -73,12 +86,7 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t* pamh,
     }
 
     std::string binddn = arguments["binddn"];
-
-    // replace %s with user
-    std::string::size_type pos = binddn.find("%s");
-    if (pos != std::string::npos) {
-        binddn = binddn.replace(pos, 2, user);
-    }
+    replace_all(binddn, "%s", user);
 
     // check against ldap database
     if (verify(arguments["uri"].c_str(), binddn.c_str(), pass)) {
