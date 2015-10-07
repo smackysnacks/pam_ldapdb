@@ -19,12 +19,20 @@ Then run `make`
 
 ## Installing
 Move the compiled `pam_ldapdb.so` file to `/usr/lib64/security/` if you're
-running a 64 system, otherwise move it to `/usr/lib/security/`.
+running a 64-bit system, otherwise move it to `/usr/lib/security/`.
 
-## Configure
-Modify `/etc/pam.d/*` to fit your needs, such as the following:
+## Configuring
+pam_ldapdb takes two arguments, `uri` and `binddn`. The `uri` parameter should
+point to your LDAP server and includes the schema (e.g.
+`uri=ldaps://my.ldap.server`). The `binddn` parameter is a template string that
+contains one or more instances of `%s` that are to be replaced by the
+connecting user. For example, if given `binddn=uid=%s,dc=my,dc=ldap,dc=server`,
+and the user `bob` is connecting then the PAM module will replace the binddn
+with `uid=bob,dc=my,dc=ldap,dc=server`.
 
-    auth  sufficient  pam_ldapdb.so uri=ldap://example.com binddn=uid=%s,dc=example,dc=com
+Modify `/etc/pam.d/*` to match your setup:
+
+    auth sufficient pam_ldapdb.so uri=ldap://example.com binddn=uid=%s,dc=example,dc=com
 
 ## Troubleshooting
 ### SELinux
