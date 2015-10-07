@@ -9,7 +9,7 @@ you don't have a set of search credentials, but you know ahead of time what a
 user's DN is.
 
 ## Building
-With GCC installed, retrieve the development dependencies...
+With GCC installed, retrieve the development dependencies.
 
     CentOS 6 and 7
     # yum install pam-devel
@@ -22,13 +22,13 @@ Move the compiled `pam_ldapdb.so` file to `/usr/lib64/security/` if you're
 running a 64 system, otherwise move it to `/usr/lib/security/`.
 
 ## Configure
-Include the following in your PAM configuration...
+Modify `/etc/pam.d/*` to fit your needs, such as the following:
 
     auth  sufficient  pam_ldapdb.so uri=ldap://example.com binddn=uid=%s,dc=example,dc=com
 
 ## Troubleshooting
 ### SELinux
-If your system is running SELinux, you will need to run add the correct policies.
+If your system is running SELinux, you will need to write the following policies:
 
     # setsebool -P nis_enabled 1
     # setsebool -P authlogin_nsswitch_use_ldap 1
