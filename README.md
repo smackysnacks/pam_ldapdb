@@ -2,11 +2,11 @@
 
 # PAM LDAPDB
 Traditionally, before binding against an LDAP server with some user
-credentials, you bind with a set of searching credentials so you can query the
-database for the distinguished name of a user's account. This PAM module allows
-you to skip the searching step entirely. This is useful in such a case where
-you don't have a set of search credentials, but you know ahead of time what a
-user's DN is.
+credentials, you bind with a set of searching credentials so that you can query
+the database for the distinguished name of a user's account. This PAM module
+allows you to skip the searching step entirely, which is useful in cases where
+you don't possess the necessary search credentials, but you do know the form of
+a user's DN ahead of time.
 
 ## Building
 With GCC installed, retrieve the development dependencies.
