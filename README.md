@@ -26,9 +26,9 @@ pam_ldapdb takes two arguments, `uri` and `binddn`. The `uri` parameter should
 point to your LDAP server and includes the schema (e.g.
 `uri=ldaps://my.ldap.server`). The `binddn` parameter is a template string that
 contains one or more instances of `%s` that are to be replaced by the
-connecting user. For example, if given `binddn=uid=%s,dc=my,dc=ldap,dc=server`,
-and the user `bob` is connecting then the PAM module will replace the binddn
-with `uid=bob,dc=my,dc=ldap,dc=server`.
+connecting user. For example, if given `binddn=uid=%s,dc=my,dc=ldap,dc=server`
+and the user `bob` is connecting then the new string will become
+`uid=bob,dc=my,dc=ldap,dc=server`.
 
 Modify `/etc/pam.d/*` to match your setup:
 
@@ -36,7 +36,7 @@ Modify `/etc/pam.d/*` to match your setup:
 
 ## Troubleshooting
 ### SELinux
-If your system is running SELinux, you will need to write the following policies:
+If your system is running SELinux, you may need to enable the following booleans:
 
     # setsebool -P nis_enabled 1
     # setsebool -P authlogin_nsswitch_use_ldap 1
