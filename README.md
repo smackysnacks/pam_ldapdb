@@ -36,7 +36,7 @@ Modify `/etc/pam.d/*` to match your setup:
 
 ## Troubleshooting
 ### SELinux
-If your system is running SELinux, you may need to enable the following booleans:
+If your system is running SELinux, you may need to enable the following policies:
 
     # setsebool -P nis_enabled 1
     # setsebool -P authlogin_nsswitch_use_ldap 1
