@@ -18,8 +18,7 @@ With GCC installed, retrieve the development dependencies.
 Then run `make`
 
 ## Installing
-Move the compiled `pam_ldapdb.so` file to `/usr/lib64/security/` if you're
-running a 64-bit system, otherwise move it to `/usr/lib/security/`.
+`make install`
 
 ## Configuring
 pam_ldapdb takes two arguments, `uri` and `binddn`. The `uri` parameter should
