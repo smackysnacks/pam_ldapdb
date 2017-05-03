@@ -9,22 +9,45 @@
 #define LDAP_DEPRECATED 1
 #include <ldap.h>
 
-
 typedef std::map<std::string, std::string> ArgMap;
 
-
-static bool verify(const char* host,
-                   const char* binddn,
-                   const char* pw)
+static int ldap_to_pam_rc(int ldap_rc)
 {
-    LDAP* ld;
-
-    if (ldap_initialize(&ld, host)) {
-        return false;
+    switch (ldap_rc) {
+    case LDAP_SUCCESS:
+        /* everything was fine */
+        return PAM_SUCCESS;
+    case LDAP_UNAVAILABLE:
+    case LDAP_TIMELIMIT_EXCEEDED:
+    case LDAP_OPERATIONS_ERROR:
+    case LDAP_BUSY:
+    case LDAP_LOOP_DETECT:
+    case LDAP_SERVER_DOWN:
+    case LDAP_TIMEOUT:
+    case LDAP_CONNECT_ERROR:
+    case LDAP_NO_RESULTS_RETURNED:
+        /* cannot access LDAP correctly */
+        return PAM_AUTHINFO_UNAVAIL;
     }
 
-    int rc = ldap_simple_bind_s(ld, binddn, pw);
-    return rc == LDAP_SUCCESS;
+    /* something else went wrong */
+    return PAM_AUTH_ERR;
+}
+
+static int verify(const char* host,
+                  const char* binddn,
+                  const char* pw)
+{
+    LDAP* ld;
+    int ldap_rc, pam_rc;
+
+    ldap_rc = ldap_initialize(&ld, host);
+    pam_rc = ldap_to_pam_rc(ldap_rc);
+    if (pam_rc != PAM_SUCCESS)
+        return pam_rc;
+
+    ldap_rc = ldap_simple_bind_s(ld, binddn, pw);
+    return ldap_to_pam_rc(ldap_rc);
 }
 
 
@@ -89,11 +112,7 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t* pamh,
     replace_all(binddn, "%s", user);
 
     // check against ldap database
-    if (verify(arguments["uri"].c_str(), binddn.c_str(), pass)) {
-        return PAM_SUCCESS;
-    } else {
-        return PAM_AUTH_ERR;
-    }
+    return verify(arguments["uri"].c_str(), binddn.c_str(), pass);
 }
 
 
