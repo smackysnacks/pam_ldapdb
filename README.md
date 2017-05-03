@@ -33,6 +33,24 @@ Modify `/etc/pam.d/*` to match your setup:
 
     auth sufficient pam_ldapdb.so uri=ldap://example.com binddn=uid=%s,dc=example,dc=com
 
+### Using pam_ldapdb with pam_ccreds
+To enable offline LDAP authentication with pam_ldapdb the [pam_ccreds (cached
+credentials) module](https://github.com/PADL/pam_ccreds) can be used. Therefore
+make sure the desired user is available locally with a locked password (use:
+`passwd -dl <username>`). Then configure pam "auth" to something similar like
+the following example:
+
+	auth    sufficient      pam_unix.so     nullok_secure
+	auth    [success=3 default=2 authinfo_unavail=ignore]      pam_ldapdb.so ldap://example.com binddn=uid=%s,dc=example,dc=com
+	auth    [success=2 default=ignore]                         pam_ccreds.so action=validate use_first_pass
+	auth    [default=ignore]                                   pam_ccreds.so action=update
+	auth    requisite       pam_deny.so
+	auth    required        pam_permit.so
+	auth    optional        pam_ccreds.so action=store
+
+For more information on how PAM configuration and the pam_ccreds module works
+please take a look at the corresponding documentation.
+
 ## Troubleshooting
 ### SELinux
 If your system is running SELinux, you may need to enable the following policies:
