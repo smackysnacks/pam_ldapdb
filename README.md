@@ -9,11 +9,14 @@ you don't possess the necessary search credentials, but you do know the form of
 a user's DN ahead of time.
 
 ## Building
-With GCC installed, retrieve the development dependencies.
+With GCC and make installed, retrieve the development dependencies.
 
     CentOS 6 and 7
     # yum install pam-devel
     # yum install openldap-devel
+
+    Debian 9
+    $ sudo apt-get install libpam0g-dev libldap2-dev
 
 Then run `make`
 
