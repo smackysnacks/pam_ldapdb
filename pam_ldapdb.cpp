@@ -93,13 +93,17 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t* pamh,
 {
     const char* user;
     const char* pass;
+    int ret;
     ArgMap arguments = get_args(argc, argv);
 
-    if (pam_get_user(pamh, &user, NULL) != PAM_SUCCESS) {
-        return PAM_AUTH_ERR;
+    ret = pam_get_user(pamh, &user, NULL);
+    if (ret != PAM_SUCCESS) {
+        return ret;
     }
-    if (pam_get_authtok(pamh, PAM_AUTHTOK, &pass, NULL) != PAM_SUCCESS) {
-        return PAM_AUTH_ERR;
+
+    ret = pam_get_authtok(pamh, PAM_AUTHTOK, &pass, NULL);
+    if (ret != PAM_SUCCESS) {
+        return ret;
     }
 
     // ensure uri and binddn PAM parameters were specified
