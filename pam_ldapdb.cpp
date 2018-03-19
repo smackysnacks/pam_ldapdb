@@ -117,6 +117,14 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t* pamh,
     std::string binddn = arguments["binddn"];
     replace_all(binddn, "%s", user);
 
+    // ldap_simple_bind_s accepts empty passwords for all users, therefore we
+    // catch and deny them here...
+    if (strlen(pass) == 0) {
+        pam_syslog(pamh, LOG_NOTICE, "ldap authentication failure: "
+                   "empty password for user %s", user);
+        return PAM_AUTH_ERR;
+    }
+
     // check against ldap database
     ret = verify(arguments["uri"].c_str(), binddn.c_str(), pass);
     if (ret != PAM_SUCCESS) {
