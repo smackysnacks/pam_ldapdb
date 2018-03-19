@@ -2,6 +2,7 @@
 #include <string>
 #include <utility>
 #include <syslog.h>
+#include <pwd.h>
 
 #define PAM_SM_AUTH
 #include <security/pam_modules.h>
@@ -94,6 +95,8 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t* pamh,
 {
     const char* user;
     const char* pass;
+    uid_t minimum_uid = 0;
+    struct passwd *pwd;
     int ret;
     ArgMap arguments = get_args(argc, argv);
 
@@ -111,6 +114,33 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t* pamh,
     if (arguments.find("uri") == arguments.end() ||
         arguments.find("binddn") == arguments.end()) {
         pam_syslog(pamh, LOG_NOTICE, "unable to find URI and/or BINDDN");
+        return PAM_AUTH_ERR;
+    }
+
+    // get passwd entry for desired user. This is required for UID checking.
+    pwd = getpwnam(user);
+    if (!pwd) {
+        pam_syslog(pamh, LOG_NOTICE, "unable to get uid for user %s", user);
+        return PAM_AUTH_ERR;
+    }
+
+    // parse minimum_uid if given
+    if (arguments.find("minimum_uid") != arguments.end()) {
+        try {
+            minimum_uid = (uid_t) std::stoul(arguments["minimum_uid"]);
+        } catch (const std::invalid_argument &ex) {
+            pam_syslog(pamh, LOG_ERR, "the given minimum_uid is invalid!");
+            return PAM_AUTH_ERR;
+        } catch (const std::out_of_range &ex) {
+            pam_syslog(pamh, LOG_ERR, "the given minimum_uid is out of range!");
+            return PAM_AUTH_ERR;
+        }
+    }
+
+    // validate uid against min value
+    if (minimum_uid > pwd->pw_uid) {
+        pam_syslog(pamh, LOG_NOTICE, "ldap authentication failure: "
+                   "uid out of range (%u <= %u)", minimum_uid, pwd->pw_uid);
         return PAM_AUTH_ERR;
     }
 
