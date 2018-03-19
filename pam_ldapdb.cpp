@@ -1,6 +1,7 @@
 #include <map>
 #include <string>
 #include <utility>
+#include <syslog.h>
 
 #define PAM_SM_AUTH
 #include <security/pam_modules.h>
@@ -109,6 +110,7 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t* pamh,
     // ensure uri and binddn PAM parameters were specified
     if (arguments.find("uri") == arguments.end() ||
         arguments.find("binddn") == arguments.end()) {
+        pam_syslog(pamh, LOG_NOTICE, "unable to find URI and/or BINDDN");
         return PAM_AUTH_ERR;
     }
 
@@ -116,7 +118,13 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t* pamh,
     replace_all(binddn, "%s", user);
 
     // check against ldap database
-    return verify(arguments["uri"].c_str(), binddn.c_str(), pass);
+    ret = verify(arguments["uri"].c_str(), binddn.c_str(), pass);
+    if (ret != PAM_SUCCESS) {
+        pam_syslog(pamh, LOG_NOTICE, "ldap authentication failure: "
+                   "user=<%s> uri=<%s> binddn=<%s>",
+                   user, arguments["uri"].c_str(), binddn.c_str());
+    }
+    return ret;
 }
 
 
