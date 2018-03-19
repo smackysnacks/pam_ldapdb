@@ -36,6 +36,10 @@ Modify `/etc/pam.d/*` to match your setup:
 
     auth sufficient pam_ldapdb.so uri=ldap://example.com binddn=uid=%s,dc=example,dc=com
 
+## Optional Parameters
+
+* `minimum_uid <uid>` ... If specified, a user must have a POSIX user ID of at least uid in order for logon authorization to succeed.
+
 ### Using pam_ldapdb with pam_ccreds
 To enable offline LDAP authentication with pam_ldapdb the [pam_ccreds (cached
 credentials) module](https://github.com/PADL/pam_ccreds) can be used. Therefore
