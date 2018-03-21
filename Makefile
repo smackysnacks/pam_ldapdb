@@ -15,13 +15,16 @@ RM		:= rm -rf
 CXX ?= g++
 CFLAGS ?= -O2
 
-CFLAGS += -Wall -Wextra
+CFLAGS += -std=c++11 -Wall -Wextra
 LDFLAGS	+= -Wl,-z,relro
 
 all: library
 
 library: pam_ldapdb.o
-	$(CXX) $(CFLAGS) -shared -fPIC -o pam_ldapdb.so pam_ldapdb.cpp -lldap $(LDFLAGS)
+	$(CXX) $(CFLAGS) -shared -o pam_ldapdb.so pam_ldapdb.o -lldap $(LDFLAGS)
+
+pam_ldapdb.o: pam_ldapdb.cpp
+	$(CXX) $(CFLAGS) -c -fPIC -o pam_ldapdb.o pam_ldapdb.cpp
 
 install:
 	$(INSTALL_DIR) $(DESTDIR)$(PAMDIR)
