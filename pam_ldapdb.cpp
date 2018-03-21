@@ -96,6 +96,7 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t* pamh,
     const char* user;
     const char* pass;
     uid_t minimum_uid = 0;
+    uid_t maximum_uid = (uid_t) - 1;
     struct passwd *pwd;
     int ret;
     ArgMap arguments = get_args(argc, argv);
@@ -137,15 +138,26 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t* pamh,
         }
     }
 
-    // validate uid against min value
-    if (minimum_uid > pwd->pw_uid) {
-        pam_syslog(pamh, LOG_NOTICE, "ldap authentication failure: "
-                   "uid out of range (%u <= %u)", minimum_uid, pwd->pw_uid);
-        return PAM_AUTH_ERR;
+    // parse maximum_uid if given
+    if (arguments.find("maximum_uid") != arguments.end()) {
+        try {
+            maximum_uid = (uid_t) std::stoul(arguments["maximum_uid"]);
+        } catch (const std::invalid_argument &ex) {
+            pam_syslog(pamh, LOG_ERR, "the given maximum_uid is invalid!");
+            return PAM_AUTH_ERR;
+        } catch (const std::out_of_range &ex) {
+            pam_syslog(pamh, LOG_ERR, "the given maximum_uid is out of range!");
+            return PAM_AUTH_ERR;
+        }
     }
 
-    std::string binddn = arguments["binddn"];
-    replace_all(binddn, "%s", user);
+    // validate uid against min value
+    if (minimum_uid > pwd->pw_uid || maximum_uid < pwd->pw_uid) {
+        pam_syslog(pamh, LOG_NOTICE, "ldap authentication failure: "
+                   "uid out of range (%u <= %u <= %u)",
+                   minimum_uid, pwd->pw_uid, maximum_uid);
+        return PAM_AUTH_ERR;
+    }
 
     // ldap_simple_bind_s accepts empty passwords for all users, therefore we
     // catch and deny them here...
@@ -154,6 +166,10 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t* pamh,
                    "empty password for user %s", user);
         return PAM_AUTH_ERR;
     }
+
+    // parse & prepare binddn
+    std::string binddn = arguments["binddn"];
+    replace_all(binddn, "%s", user);
 
     // check against ldap database
     ret = verify(arguments["uri"].c_str(), binddn.c_str(), pass);

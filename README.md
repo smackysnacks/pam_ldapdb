@@ -39,6 +39,7 @@ Modify `/etc/pam.d/*` to match your setup:
 ## Optional Parameters
 
 * `minimum_uid <uid>` ... If specified, a user must have a POSIX user ID of at least uid in order for logon authorization to succeed.
+* `maximum_uid <uid>` ... If specified, a user must have a POSIX user ID of at most uid in order for logon authorization to succeed.
 
 ### Using pam_ldapdb with pam_ccreds
 To enable offline LDAP authentication with pam_ldapdb the [pam_ccreds (cached
