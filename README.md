@@ -82,7 +82,7 @@ LICENSE = "MIT"
 LIC_FILES_CHKSUM = "file://LICENSE;md5=41ab94182d94be9bb35e2a8b933f1e7d"
 
 # the desired pam_ldapdb version
-PV = "1.2"
+PV = "1.3"
 
 SRC_URI = "git://git@github.com/rmbreak/pam_ldapdb.git;protocol=ssh;name=git"
 SRCREV_git = "v${PV}"
