@@ -65,33 +65,3 @@ If your system is running SELinux, you may need to enable the following policies
 
     # setsebool -P nis_enabled 1
     # setsebool -P authlogin_nsswitch_use_ldap 1
-
-## Bitbake Recipe
-The following bitbake recipe may be used for [OpenEmbedded](https://www.openembedded.org),
-respectively [Yocto Project](https://www.yoctoproject.org/) integration of pam_ldapdb.
-```
-# libpam-ldapdb.bb
-#
-SUMMARY = "PAM searchless LDAP authentication module"
-HOMEPAGE = "https://github.com/rmbreak/pam_ldapdb"
-BUGTRACKER = "https://github.com/rmbreak/pam_ldapdb/issues"
-DEPENDS = "libpam openldap"
-SECTION = "libs"
-
-LICENSE = "MIT"
-LIC_FILES_CHKSUM = "file://LICENSE;md5=41ab94182d94be9bb35e2a8b933f1e7d"
-
-# the desired pam_ldapdb version
-PV = "1.3"
-
-SRC_URI = "git://git@github.com/rmbreak/pam_ldapdb.git;protocol=ssh;name=git"
-SRCREV_git = "v${PV}"
-
-S = "${WORKDIR}/git"
-
-do_install () {
-	oe_runmake install DESTDIR=${D} PAMDIR=/lib/security
-}
-
-FILES_${PN} = "/lib/security/pam_ldapdb.so"
-```
