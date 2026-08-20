@@ -151,17 +151,20 @@ static void replace_all(std::string& s,
                         const std::string& search_s,
                         const std::string& replace_s)
 {
+    if (search_s.empty())
+        return;
+
     std::string::size_type last_pos = 0;
     while ((last_pos = s.find(search_s, last_pos)) != std::string::npos) {
         s.replace(last_pos, search_s.length(), replace_s);
+        last_pos += replace_s.length();
     }
 }
 
 
-PAM_EXTERN int pam_sm_authenticate(pam_handle_t* pamh,
-                                   int /* flags */,
-                                   int argc,
-                                   const char** argv)
+static int authenticate_impl(pam_handle_t* pamh,
+                             int argc,
+                             const char** argv)
 {
     const char* user;
     const char* pass;
@@ -260,6 +263,27 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t* pamh,
                    user, arguments["uri"].c_str(), binddn.c_str());
     }
     return ret;
+}
+
+
+PAM_EXTERN int pam_sm_authenticate(pam_handle_t* pamh,
+                                   int /* flags */,
+                                   int argc,
+                                   const char** argv)
+{
+    /* libpam calls this from C. Letting an exception unwind out of here is
+     * undefined behaviour and in practice reaches std::terminate, killing
+     * whatever was authenticating -- sshd, the display manager, a screen
+     * locker, etc. */
+    try {
+        return authenticate_impl(pamh, argc, argv);
+    } catch (const std::exception &ex) {
+        pam_syslog(pamh, LOG_CRIT, "internal error: %s", ex.what());
+        return PAM_SERVICE_ERR;
+    } catch (...) {
+        pam_syslog(pamh, LOG_CRIT, "internal error: unknown exception");
+        return PAM_SERVICE_ERR;
+    }
 }
 
 
