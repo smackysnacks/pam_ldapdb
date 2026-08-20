@@ -18,7 +18,6 @@ static int ldap_to_pam_rc(int ldap_rc)
 {
     switch (ldap_rc) {
     case LDAP_SUCCESS:
-        /* everything was fine */
         return PAM_SUCCESS;
     case LDAP_UNAVAILABLE:
     case LDAP_TIMELIMIT_EXCEEDED:
@@ -29,12 +28,15 @@ static int ldap_to_pam_rc(int ldap_rc)
     case LDAP_TIMEOUT:
     case LDAP_CONNECT_ERROR:
     case LDAP_NO_RESULTS_RETURNED:
-        /* cannot access LDAP correctly */
+    case LDAP_PROTOCOL_ERROR:
+    case LDAP_AUTH_METHOD_NOT_SUPPORTED:
+    case LDAP_STRONG_AUTH_REQUIRED:
+    case LDAP_CONFIDENTIALITY_REQUIRED:
+    case LDAP_INAPPROPRIATE_AUTH:
         return PAM_AUTHINFO_UNAVAIL;
+    default:
+        return PAM_AUTH_ERR;
     }
-
-    /* something else went wrong */
-    return PAM_AUTH_ERR;
 }
 
 static int verify(const char* host,
