@@ -43,11 +43,18 @@ static int verify(const char* host,
 {
     LDAP* ld;
     int ldap_rc, pam_rc;
+    int version = LDAP_VERSION3;
 
     ldap_rc = ldap_initialize(&ld, host);
     pam_rc = ldap_to_pam_rc(ldap_rc);
     if (pam_rc != PAM_SUCCESS)
         return pam_rc;
+
+    ldap_rc = ldap_set_option(ld, LDAP_OPT_PROTOCOL_VERSION, &version);
+    if (ldap_rc != LDAP_OPT_SUCCESS) {
+        ldap_unbind_ext_s(ld, NULL, NULL);
+        return PAM_SERVICE_ERR;
+    }
 
     ldap_rc = ldap_simple_bind_s(ld, binddn, pw);
 
