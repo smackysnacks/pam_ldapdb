@@ -66,6 +66,16 @@ static int verify(const char* host,
         return PAM_SERVICE_ERR;
     }
 
+    /* This module performs exactly one bind and no searches, so it has no use
+     * for referrals. libldap will not replay the password to a referred-to host
+     * without ldap_set_rebind_proc(), which we never install, but that is a
+     * guarantee worth not depending on in an authentication path. */
+    if (ldap_set_option(ld, LDAP_OPT_REFERRALS, LDAP_OPT_OFF)
+            != LDAP_OPT_SUCCESS) {
+        ldap_unbind_ext_s(ld, NULL, NULL);
+        return PAM_SERVICE_ERR;
+    }
+
     /* NETWORK_TIMEOUT bounds the connect; TIMEOUT bounds the wait for the bind
      * response. */
     tv.tv_sec = timeout_sec;
