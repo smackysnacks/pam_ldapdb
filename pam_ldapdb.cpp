@@ -10,7 +10,6 @@
 #include <security/pam_modules.h>
 #include <security/pam_ext.h>
 
-#define LDAP_DEPRECATED 1
 #include <ldap.h>
 
 typedef std::map<std::string, std::string> ArgMap;
@@ -54,6 +53,7 @@ static int verify(const char* host,
     int ldap_rc, pam_rc;
     int version = LDAP_VERSION3;
     struct timeval tv;
+    struct berval cred;
 
     ldap_rc = ldap_initialize(&ld, host);
     pam_rc = ldap_to_pam_rc(ldap_rc);
@@ -76,7 +76,10 @@ static int verify(const char* host,
         return PAM_SERVICE_ERR;
     }
 
-    ldap_rc = ldap_simple_bind_s(ld, binddn, pw);
+    cred.bv_val = const_cast<char*>(pw);
+    cred.bv_len = std::strlen(pw);
+    ldap_rc = ldap_sasl_bind_s(ld, binddn, LDAP_SASL_SIMPLE, &cred,
+                               NULL, NULL, NULL);
 
     ldap_unbind_ext_s(ld, NULL, NULL);
 
@@ -210,8 +213,9 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t* pamh,
         return PAM_AUTH_ERR;
     }
 
-    // ldap_simple_bind_s accepts empty passwords for all users, therefore we
-    // catch and deny them here...
+    // An empty credential is an *unauthenticated* bind, which a directory will
+    // happily accept as anonymous and report as success, so it has to be caught
+    // here rather than left to the server.
     if (std::strlen(pass) == 0) {
         pam_syslog(pamh, LOG_NOTICE, "ldap authentication failure: "
                    "empty password for user %s", user);
