@@ -19,6 +19,10 @@ typedef std::map<std::string, std::string> ArgMap;
 #define LDAPDB_TIMEOUT_DEFAULT 10
 #define LDAPDB_TIMEOUT_MAX     3600
 
+/* Largest value uid_t can hold, as an unsigned long, for range-checking before
+ * the narrowing cast. */
+#define LDAPDB_UID_MAX ((unsigned long) (uid_t) -1)
+
 static int ldap_to_pam_rc(int ldap_rc)
 {
     switch (ldap_rc) {
@@ -97,6 +101,28 @@ static int verify(const char* host,
 }
 
 
+/* Accept a non-empty run of decimal digits and nothing else, and only a result
+ * that fits the caller's ceiling. */
+static bool parse_bounded_ulong(const std::string& in,
+                                unsigned long max,
+                                unsigned long& out)
+{
+    if (in.empty() || in.find_first_not_of("0123456789") != std::string::npos)
+        return false;
+
+    try {
+        unsigned long value = std::stoul(in);
+        if (value > max)
+            return false;
+        out = value;
+    } catch (const std::exception&) {
+        return false;
+    }
+
+    return true;
+}
+
+
 static ArgMap get_args(int argc,
                        const char** argv)
 {
@@ -172,47 +198,37 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t* pamh,
 
     // parse minimum_uid if given
     if (arguments.find("minimum_uid") != arguments.end()) {
-        try {
-            minimum_uid = (uid_t) std::stoul(arguments["minimum_uid"]);
-        } catch (const std::invalid_argument &ex) {
-            pam_syslog(pamh, LOG_ERR, "the given minimum_uid is invalid!");
-            return PAM_AUTH_ERR;
-        } catch (const std::out_of_range &ex) {
-            pam_syslog(pamh, LOG_ERR, "the given minimum_uid is out of range!");
-            return PAM_AUTH_ERR;
+        unsigned long value;
+        if (!parse_bounded_ulong(arguments["minimum_uid"], LDAPDB_UID_MAX, value)) {
+            pam_syslog(pamh, LOG_ERR, "minimum_uid=<%s> is not a valid uid "
+                       "(expected 0-%lu)", arguments["minimum_uid"].c_str(),
+                       LDAPDB_UID_MAX);
+            return PAM_SERVICE_ERR;
         }
+        minimum_uid = (uid_t) value;
     }
 
     // parse maximum_uid if given
     if (arguments.find("maximum_uid") != arguments.end()) {
-        try {
-            maximum_uid = (uid_t) std::stoul(arguments["maximum_uid"]);
-        } catch (const std::invalid_argument &ex) {
-            pam_syslog(pamh, LOG_ERR, "the given maximum_uid is invalid!");
-            return PAM_AUTH_ERR;
-        } catch (const std::out_of_range &ex) {
-            pam_syslog(pamh, LOG_ERR, "the given maximum_uid is out of range!");
-            return PAM_AUTH_ERR;
+        unsigned long value;
+        if (!parse_bounded_ulong(arguments["maximum_uid"], LDAPDB_UID_MAX, value)) {
+            pam_syslog(pamh, LOG_ERR, "maximum_uid=<%s> is not a valid uid "
+                       "(expected 0-%lu)", arguments["maximum_uid"].c_str(),
+                       LDAPDB_UID_MAX);
+            return PAM_SERVICE_ERR;
         }
+        maximum_uid = (uid_t) value;
     }
 
     // parse timeout if given
     if (arguments.find("timeout") != arguments.end()) {
-        const std::string& raw = arguments["timeout"];
-        try {
-            std::string::size_type pos = 0;
-            unsigned long value = std::stoul(raw, &pos);
-            if (pos != raw.length() || value < 1 || value > LDAPDB_TIMEOUT_MAX)
-                throw std::out_of_range("timeout");
-            timeout_sec = (int) value;
-        } catch (const std::invalid_argument &ex) {
-            pam_syslog(pamh, LOG_ERR, "the given timeout is invalid!");
-            return PAM_SERVICE_ERR;
-        } catch (const std::out_of_range &ex) {
-            pam_syslog(pamh, LOG_ERR, "the given timeout is out of range "
-                       "(expected 1-%d seconds)!", LDAPDB_TIMEOUT_MAX);
+        unsigned long value;
+        if (!parse_bounded_ulong(arguments["timeout"], LDAPDB_TIMEOUT_MAX, value) || value < 1) {
+            pam_syslog(pamh, LOG_ERR, "timeout=<%s> is not a valid duration (expected 1-%d seconds)",
+                       arguments["timeout"].c_str(), LDAPDB_TIMEOUT_MAX);
             return PAM_SERVICE_ERR;
         }
+        timeout_sec = (int) value;
     }
 
     // validate uid against min value
