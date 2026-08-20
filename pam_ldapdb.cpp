@@ -14,6 +14,11 @@
 
 typedef std::map<std::string, std::string> ArgMap;
 
+/* Seconds to wait on the directory before giving up. Without a bound the bind
+ * blocks on the kernel TCP timeout. Overridable with timeout=<seconds>. */
+#define LDAPDB_TIMEOUT_DEFAULT 10
+#define LDAPDB_TIMEOUT_MAX     3600
+
 static int ldap_to_pam_rc(int ldap_rc)
 {
     switch (ldap_rc) {
@@ -41,11 +46,13 @@ static int ldap_to_pam_rc(int ldap_rc)
 
 static int verify(const char* host,
                   const char* binddn,
-                  const char* pw)
+                  const char* pw,
+                  int timeout_sec)
 {
     LDAP* ld;
     int ldap_rc, pam_rc;
     int version = LDAP_VERSION3;
+    struct timeval tv;
 
     ldap_rc = ldap_initialize(&ld, host);
     pam_rc = ldap_to_pam_rc(ldap_rc);
@@ -54,6 +61,16 @@ static int verify(const char* host,
 
     ldap_rc = ldap_set_option(ld, LDAP_OPT_PROTOCOL_VERSION, &version);
     if (ldap_rc != LDAP_OPT_SUCCESS) {
+        ldap_unbind_ext_s(ld, NULL, NULL);
+        return PAM_SERVICE_ERR;
+    }
+
+    /* NETWORK_TIMEOUT bounds the connect; TIMEOUT bounds the wait for the bind
+     * response. */
+    tv.tv_sec = timeout_sec;
+    tv.tv_usec = 0;
+    if (ldap_set_option(ld, LDAP_OPT_NETWORK_TIMEOUT, &tv) != LDAP_OPT_SUCCESS ||
+        ldap_set_option(ld, LDAP_OPT_TIMEOUT, &tv) != LDAP_OPT_SUCCESS) {
         ldap_unbind_ext_s(ld, NULL, NULL);
         return PAM_SERVICE_ERR;
     }
@@ -110,6 +127,7 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t* pamh,
     const char* pass;
     uid_t minimum_uid = 0;
     uid_t maximum_uid = (uid_t) - 1;
+    int timeout_sec = LDAPDB_TIMEOUT_DEFAULT;
     struct passwd *pwd;
     int ret;
     ArgMap arguments = get_args(argc, argv);
@@ -164,6 +182,25 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t* pamh,
         }
     }
 
+    // parse timeout if given
+    if (arguments.find("timeout") != arguments.end()) {
+        const std::string& raw = arguments["timeout"];
+        try {
+            std::string::size_type pos = 0;
+            unsigned long value = std::stoul(raw, &pos);
+            if (pos != raw.length() || value < 1 || value > LDAPDB_TIMEOUT_MAX)
+                throw std::out_of_range("timeout");
+            timeout_sec = (int) value;
+        } catch (const std::invalid_argument &ex) {
+            pam_syslog(pamh, LOG_ERR, "the given timeout is invalid!");
+            return PAM_SERVICE_ERR;
+        } catch (const std::out_of_range &ex) {
+            pam_syslog(pamh, LOG_ERR, "the given timeout is out of range "
+                       "(expected 1-%d seconds)!", LDAPDB_TIMEOUT_MAX);
+            return PAM_SERVICE_ERR;
+        }
+    }
+
     // validate uid against min value
     if (minimum_uid > pwd->pw_uid || maximum_uid < pwd->pw_uid) {
         pam_syslog(pamh, LOG_NOTICE, "ldap authentication failure: "
@@ -185,7 +222,7 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t* pamh,
     replace_all(binddn, "%s", user);
 
     // check against ldap database
-    ret = verify(arguments["uri"].c_str(), binddn.c_str(), pass);
+    ret = verify(arguments["uri"].c_str(), binddn.c_str(), pass, timeout_sec);
     if (ret != PAM_SUCCESS) {
         pam_syslog(pamh, LOG_NOTICE, "ldap authentication failure: "
                    "user=<%s> uri=<%s> binddn=<%s>",
