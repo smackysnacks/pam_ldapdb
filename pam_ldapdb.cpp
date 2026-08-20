@@ -2,6 +2,7 @@
 #include <string>
 #include <stdexcept>
 #include <utility>
+#include <cstring>
 #include <syslog.h>
 #include <pwd.h>
 
@@ -211,7 +212,7 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t* pamh,
 
     // ldap_simple_bind_s accepts empty passwords for all users, therefore we
     // catch and deny them here...
-    if (strlen(pass) == 0) {
+    if (std::strlen(pass) == 0) {
         pam_syslog(pamh, LOG_NOTICE, "ldap authentication failure: "
                    "empty password for user %s", user);
         return PAM_AUTH_ERR;
