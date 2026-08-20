@@ -50,6 +50,9 @@ static int verify(const char* host,
         return pam_rc;
 
     ldap_rc = ldap_simple_bind_s(ld, binddn, pw);
+
+    ldap_unbind_ext_s(ld, NULL, NULL);
+
     return ldap_to_pam_rc(ldap_rc);
 }
 
