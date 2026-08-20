@@ -162,6 +162,43 @@ static void replace_all(std::string& s,
 }
 
 
+/* The username is spliced into the binddn template, so a name carrying DN
+ * metacharacters rewrites the structure of the distinguished name rather than
+ * just its value: "bob,dc=evil" turns uid=%s,dc=x into uid=bob,dc=evil,dc=x,
+ * and "bob+uid=root" builds a multi-valued RDN. Either controls which entry the
+ * password is checked against.
+ *
+ * Reject rather than escape.
+ *
+ * Permitted: ASCII alphanumerics, "._-@$%", and any byte >= 0x80. Every RFC
+ * 4514 special is ASCII, and UTF-8 continuation bytes are all >= 0x80, so
+ * admitting the high range keeps non-ASCII usernames working without admitting
+ * a metacharacter. This also excludes leading/trailing space, a leading '#',
+ * and every control character, all of which are significant in a DN.
+ *
+ * '%' is deliberately allowed: it is not special in a DN, and here the username
+ * is only ever the replacement text, never rescanned as a template. */
+static bool username_is_dn_safe(const char* user)
+{
+    if (*user == '\0')
+        return false;
+
+    for (const unsigned char* p = (const unsigned char*) user; *p; p++) {
+        if (*p >= 0x80)
+            continue;
+        if ((*p >= 'A' && *p <= 'Z') || (*p >= 'a' && *p <= 'z') ||
+            (*p >= '0' && *p <= '9'))
+            continue;
+        if (*p == '.' || *p == '_' || *p == '-' ||
+            *p == '@' || *p == '$' || *p == '%')
+            continue;
+        return false;
+    }
+
+    return true;
+}
+
+
 static int authenticate_impl(pam_handle_t* pamh,
                              int argc,
                              const char** argv)
@@ -248,6 +285,14 @@ static int authenticate_impl(pam_handle_t* pamh,
     if (std::strlen(pass) == 0) {
         pam_syslog(pamh, LOG_NOTICE, "ldap authentication failure: "
                    "empty password for user %s", user);
+        return PAM_AUTH_ERR;
+    }
+
+    // the username is about to be spliced into the DN template, so make sure it
+    // cannot rewrite the DN's structure
+    if (!username_is_dn_safe(user)) {
+        pam_syslog(pamh, LOG_NOTICE, "ldap authentication failure: username "
+                   "contains characters not permitted in a bind DN");
         return PAM_AUTH_ERR;
     }
 

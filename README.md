@@ -30,6 +30,14 @@ connecting user. For example, if given `binddn=uid=%s,dc=my,dc=ldap,dc=server`
 and the user `bob` is connecting then the new string will become
 `uid=bob,dc=my,dc=ldap,dc=server`.
 
+The username is substituted into the template literally, so it must not contain
+characters that are significant in a distinguished name. Names made of letters,
+digits and `. _ - @ $ %` are accepted; anything else - notably `, + " \ < > ; =`,
+a leading `#`, leading or trailing spaces, and control characters - is refused with
+`PAM_AUTH_ERR` and logged. Such a name would otherwise rewrite the structure of
+the DN rather than just filling in its value, changing which directory entry the
+password is checked against.
+
 Modify `/etc/pam.d/*` to match your setup:
 
     auth sufficient pam_ldapdb.so uri=ldap://example.com binddn=uid=%s,dc=example,dc=com
