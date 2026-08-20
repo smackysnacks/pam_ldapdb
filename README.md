@@ -30,6 +30,9 @@ connecting user. For example, if given `binddn=uid=%s,dc=my,dc=ldap,dc=server`
 and the user `bob` is connecting then the new string will become
 `uid=bob,dc=my,dc=ldap,dc=server`.
 
+Both `uri` and `binddn` must be present and non-empty. `binddn` must
+contain at least one `%s`.
+
 The username is substituted into the template literally, so it must not contain
 characters that are significant in a distinguished name. Names made of letters,
 digits and `. _ - @ $ %` are accepted; anything else - notably `, + " \ < > ; =`,
@@ -56,7 +59,7 @@ make sure the desired user is available locally with a locked password (use:
 the following example:
 
 	auth    sufficient      pam_unix.so     nullok_secure
-	auth    [success=3 default=2 authinfo_unavail=ignore]      pam_ldapdb.so ldap://example.com binddn=uid=%s,dc=example,dc=com
+	auth    [success=3 default=2 authinfo_unavail=ignore]      pam_ldapdb.so uri=ldap://example.com binddn=uid=%s,dc=example,dc=com
 	auth    [success=2 default=ignore]                         pam_ccreds.so action=validate use_first_pass
 	auth    [default=ignore]                                   pam_ccreds.so action=update
 	auth    requisite       pam_deny.so

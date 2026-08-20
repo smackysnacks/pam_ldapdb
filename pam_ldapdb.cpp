@@ -225,8 +225,18 @@ static int authenticate_impl(pam_handle_t* pamh,
     // ensure uri and binddn PAM parameters were specified
     if (arguments.find("uri") == arguments.end() ||
         arguments.find("binddn") == arguments.end()) {
-        pam_syslog(pamh, LOG_NOTICE, "unable to find URI and/or BINDDN");
-        return PAM_AUTH_ERR;
+        pam_syslog(pamh, LOG_ERR, "unable to find URI and/or BINDDN");
+        return PAM_SERVICE_ERR;
+    }
+
+    if (arguments["uri"].empty() || arguments["binddn"].empty()) {
+        pam_syslog(pamh, LOG_ERR, "uri and binddn must not be empty");
+        return PAM_SERVICE_ERR;
+    }
+
+    if (arguments["binddn"].find("%s") == std::string::npos) {
+        pam_syslog(pamh, LOG_ERR, "binddn contains no %%s placeholder");
+        return PAM_SERVICE_ERR;
     }
 
     // get passwd entry for desired user. This is required for UID checking.
