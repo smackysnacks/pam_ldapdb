@@ -123,23 +123,57 @@ static bool parse_bounded_ulong(const std::string& in,
 }
 
 
-static ArgMap get_args(int argc,
+static bool is_libpam_flag(const std::string& arg)
+{
+    return arg == "use_first_pass" || arg == "try_first_pass";
+}
+
+
+/* Every option the module understands, plus authtok_type, which pam_get_authtok
+ * consumes the same way. Anything else on the PAM line is ignored, which used
+ * to make a typo indistinguishable from a correct option -- "bindn=" simply
+ * vanished and the module then reported "unable to find BINDDN". */
+static bool is_known_key(const std::string& key)
+{
+    return key == "uri"         || key == "binddn" ||
+           key == "minimum_uid" || key == "maximum_uid" ||
+           key == "timeout"     || key == "authtok_type";
+}
+
+
+static ArgMap get_args(pam_handle_t* pamh,
+                       int argc,
                        const char** argv)
 {
     ArgMap arguments;
 
     for (int i = 0; i < argc; i++) {
         std::string arg(argv[i]);
-        std::string::size_type pos = arg.find("=");
-        if (pos != std::string::npos) {
-            std::string key = arg.substr(0, pos);
-            std::string value = "";
+        std::string::size_type pos = arg.find('=');
 
-            if (arg.length() > pos+1) {
-                value = arg.substr(pos+1);
-            }
+        if (pos == std::string::npos) {
+            if (!is_libpam_flag(arg))
+                pam_syslog(pamh, LOG_WARNING,
+                           "ignoring argument with no '=': <%s>", arg.c_str());
+            continue;
+        }
 
-            arguments.insert(std::make_pair(key, value));
+        std::string key = arg.substr(0, pos);
+        std::string value = "";
+
+        if (arg.length() > pos+1) {
+            value = arg.substr(pos+1);
+        }
+
+        if (!is_known_key(key)) {
+            pam_syslog(pamh, LOG_WARNING,
+                       "ignoring unrecognised option <%s>", key.c_str());
+            continue;
+        }
+
+        if (!arguments.insert(std::make_pair(key, value)).second) {
+            pam_syslog(pamh, LOG_WARNING, "duplicate option <%s>: keeping the "
+                       "first value, ignoring this one", key.c_str());
         }
     }
 
@@ -210,7 +244,7 @@ static int authenticate_impl(pam_handle_t* pamh,
     int timeout_sec = LDAPDB_TIMEOUT_DEFAULT;
     struct passwd *pwd;
     int ret;
-    ArgMap arguments = get_args(argc, argv);
+    ArgMap arguments = get_args(pamh, argc, argv);
 
     ret = pam_get_user(pamh, &user, NULL);
     if (ret != PAM_SUCCESS) {

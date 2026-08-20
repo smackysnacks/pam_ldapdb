@@ -33,6 +33,13 @@ and the user `bob` is connecting then the new string will become
 Both `uri` and `binddn` must be present and non-empty. `binddn` must
 contain at least one `%s`.
 
+Options are `uri`, `binddn`, `minimum_uid`, `maximum_uid` and `timeout`.
+Anything else is ignored and logged, so a typo such as `bindn=` no longer
+disappears silently. If the same option is given twice then the first occurrence
+wins and the duplicate is logged. The `use_first_pass`, `try_first_pass`, and
+`authtok_type=` flags are read by libpam itself rather than by this module, and
+pass through without comment.
+
 The username is substituted into the template literally, so it must not contain
 characters that are significant in a distinguished name. Names made of letters,
 digits and `. _ - @ $ %` are accepted; anything else - notably `, + " \ < > ; =`,
