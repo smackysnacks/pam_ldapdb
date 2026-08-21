@@ -1,5 +1,3 @@
-[![Build Status](https://travis-ci.org/rmbreak/pam_ldapdb.svg?branch=master)](https://travis-ci.org/rmbreak/pam_ldapdb)
-
 # PAM LDAPDB
 Traditionally, before binding against an LDAP server with some user
 credentials, you bind with a set of searching credentials so that you can query
