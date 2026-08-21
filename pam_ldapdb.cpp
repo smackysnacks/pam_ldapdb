@@ -1,14 +1,14 @@
-#include <map>
-#include <string>
-#include <stdexcept>
-#include <utility>
 #include <cstring>
-#include <syslog.h>
+#include <map>
 #include <pwd.h>
+#include <stdexcept>
+#include <string>
+#include <syslog.h>
+#include <utility>
 
 #define PAM_SM_AUTH
-#include <security/pam_modules.h>
 #include <security/pam_ext.h>
+#include <security/pam_modules.h>
 
 #include <ldap.h>
 
@@ -17,14 +17,13 @@ typedef std::map<std::string, std::string> ArgMap;
 /* Seconds to wait on the directory before giving up. Without a bound the bind
  * blocks on the kernel TCP timeout. Overridable with timeout=<seconds>. */
 #define LDAPDB_TIMEOUT_DEFAULT 10
-#define LDAPDB_TIMEOUT_MAX     3600
+#define LDAPDB_TIMEOUT_MAX 3600
 
 /* Largest value uid_t can hold, as an unsigned long, for range-checking before
  * the narrowing cast. */
-#define LDAPDB_UID_MAX ((unsigned long) (uid_t) -1)
+#define LDAPDB_UID_MAX ((unsigned long)(uid_t) - 1)
 
-static int ldap_to_pam_rc(int ldap_rc)
-{
+static int ldap_to_pam_rc(int ldap_rc) {
     switch (ldap_rc) {
     case LDAP_SUCCESS:
         return PAM_SUCCESS;
@@ -48,12 +47,9 @@ static int ldap_to_pam_rc(int ldap_rc)
     }
 }
 
-static int verify(const char* host,
-                  const char* binddn,
-                  const char* pw,
-                  int timeout_sec)
-{
-    LDAP* ld;
+static int verify(const char *host, const char *binddn, const char *pw,
+                  int timeout_sec) {
+    LDAP *ld;
     int ldap_rc, pam_rc;
     int version = LDAP_VERSION3;
     struct timeval tv;
@@ -74,8 +70,8 @@ static int verify(const char* host,
      * for referrals. libldap will not replay the password to a referred-to host
      * without ldap_set_rebind_proc(), which we never install, but that is a
      * guarantee worth not depending on in an authentication path. */
-    if (ldap_set_option(ld, LDAP_OPT_REFERRALS, LDAP_OPT_OFF)
-            != LDAP_OPT_SUCCESS) {
+    if (ldap_set_option(ld, LDAP_OPT_REFERRALS, LDAP_OPT_OFF) !=
+        LDAP_OPT_SUCCESS) {
         ldap_unbind_ext_s(ld, NULL, NULL);
         return PAM_SERVICE_ERR;
     }
@@ -84,29 +80,27 @@ static int verify(const char* host,
      * response. */
     tv.tv_sec = timeout_sec;
     tv.tv_usec = 0;
-    if (ldap_set_option(ld, LDAP_OPT_NETWORK_TIMEOUT, &tv) != LDAP_OPT_SUCCESS ||
+    if (ldap_set_option(ld, LDAP_OPT_NETWORK_TIMEOUT, &tv) !=
+            LDAP_OPT_SUCCESS ||
         ldap_set_option(ld, LDAP_OPT_TIMEOUT, &tv) != LDAP_OPT_SUCCESS) {
         ldap_unbind_ext_s(ld, NULL, NULL);
         return PAM_SERVICE_ERR;
     }
 
-    cred.bv_val = const_cast<char*>(pw);
+    cred.bv_val = const_cast<char *>(pw);
     cred.bv_len = std::strlen(pw);
-    ldap_rc = ldap_sasl_bind_s(ld, binddn, LDAP_SASL_SIMPLE, &cred,
-                               NULL, NULL, NULL);
+    ldap_rc =
+        ldap_sasl_bind_s(ld, binddn, LDAP_SASL_SIMPLE, &cred, NULL, NULL, NULL);
 
     ldap_unbind_ext_s(ld, NULL, NULL);
 
     return ldap_to_pam_rc(ldap_rc);
 }
 
-
 /* Accept a non-empty run of decimal digits and nothing else, and only a result
  * that fits the caller's ceiling. */
-static bool parse_bounded_ulong(const std::string& in,
-                                unsigned long max,
-                                unsigned long& out)
-{
+static bool parse_bounded_ulong(const std::string &in, unsigned long max,
+                                unsigned long &out) {
     if (in.empty() || in.find_first_not_of("0123456789") != std::string::npos)
         return false;
 
@@ -115,36 +109,27 @@ static bool parse_bounded_ulong(const std::string& in,
         if (value > max)
             return false;
         out = value;
-    } catch (const std::exception&) {
+    } catch (const std::exception &) {
         return false;
     }
 
     return true;
 }
 
-
-static bool is_libpam_flag(const std::string& arg)
-{
+static bool is_libpam_flag(const std::string &arg) {
     return arg == "use_first_pass" || arg == "try_first_pass";
 }
-
 
 /* Every option the module understands, plus authtok_type, which pam_get_authtok
  * consumes the same way. Anything else on the PAM line is ignored, which used
  * to make a typo indistinguishable from a correct option -- "bindn=" simply
  * vanished and the module then reported "unable to find BINDDN". */
-static bool is_known_key(const std::string& key)
-{
-    return key == "uri"         || key == "binddn" ||
-           key == "minimum_uid" || key == "maximum_uid" ||
-           key == "timeout"     || key == "authtok_type";
+static bool is_known_key(const std::string &key) {
+    return key == "uri" || key == "binddn" || key == "minimum_uid" ||
+           key == "maximum_uid" || key == "timeout" || key == "authtok_type";
 }
 
-
-static ArgMap get_args(pam_handle_t* pamh,
-                       int argc,
-                       const char** argv)
-{
+static ArgMap get_args(pam_handle_t *pamh, int argc, const char **argv) {
     ArgMap arguments;
 
     for (int i = 0; i < argc; i++) {
@@ -161,30 +146,29 @@ static ArgMap get_args(pam_handle_t* pamh,
         std::string key = arg.substr(0, pos);
         std::string value = "";
 
-        if (arg.length() > pos+1) {
-            value = arg.substr(pos+1);
+        if (arg.length() > pos + 1) {
+            value = arg.substr(pos + 1);
         }
 
         if (!is_known_key(key)) {
-            pam_syslog(pamh, LOG_WARNING,
-                       "ignoring unrecognised option <%s>", key.c_str());
+            pam_syslog(pamh, LOG_WARNING, "ignoring unrecognised option <%s>",
+                       key.c_str());
             continue;
         }
 
         if (!arguments.insert(std::make_pair(key, value)).second) {
-            pam_syslog(pamh, LOG_WARNING, "duplicate option <%s>: keeping the "
-                       "first value, ignoring this one", key.c_str());
+            pam_syslog(pamh, LOG_WARNING,
+                       "duplicate option <%s>: keeping the "
+                       "first value, ignoring this one",
+                       key.c_str());
         }
     }
 
     return arguments;
 }
 
-
-static void replace_all(std::string& s,
-                        const std::string& search_s,
-                        const std::string& replace_s)
-{
+static void replace_all(std::string &s, const std::string &search_s,
+                        const std::string &replace_s) {
     if (search_s.empty())
         return;
 
@@ -194,7 +178,6 @@ static void replace_all(std::string& s,
         last_pos += replace_s.length();
     }
 }
-
 
 /* The username is spliced into the binddn template, so a name carrying DN
  * metacharacters rewrites the structure of the distinguished name rather than
@@ -212,19 +195,18 @@ static void replace_all(std::string& s,
  *
  * '%' is deliberately allowed: it is not special in a DN, and here the username
  * is only ever the replacement text, never rescanned as a template. */
-static bool username_is_dn_safe(const char* user)
-{
+static bool username_is_dn_safe(const char *user) {
     if (*user == '\0')
         return false;
 
-    for (const unsigned char* p = (const unsigned char*) user; *p; p++) {
+    for (const unsigned char *p = (const unsigned char *)user; *p; p++) {
         if (*p >= 0x80)
             continue;
         if ((*p >= 'A' && *p <= 'Z') || (*p >= 'a' && *p <= 'z') ||
             (*p >= '0' && *p <= '9'))
             continue;
-        if (*p == '.' || *p == '_' || *p == '-' ||
-            *p == '@' || *p == '$' || *p == '%')
+        if (*p == '.' || *p == '_' || *p == '-' || *p == '@' || *p == '$' ||
+            *p == '%')
             continue;
         return false;
     }
@@ -232,15 +214,11 @@ static bool username_is_dn_safe(const char* user)
     return true;
 }
 
-
-static int authenticate_impl(pam_handle_t* pamh,
-                             int argc,
-                             const char** argv)
-{
-    const char* user;
-    const char* pass;
+static int authenticate_impl(pam_handle_t *pamh, int argc, const char **argv) {
+    const char *user;
+    const char *pass;
     uid_t minimum_uid = 0;
-    uid_t maximum_uid = (uid_t) - 1;
+    uid_t maximum_uid = (uid_t)-1;
     int timeout_sec = LDAPDB_TIMEOUT_DEFAULT;
     struct passwd *pwd;
     int ret;
@@ -283,41 +261,50 @@ static int authenticate_impl(pam_handle_t* pamh,
     // parse minimum_uid if given
     if (arguments.find("minimum_uid") != arguments.end()) {
         unsigned long value;
-        if (!parse_bounded_ulong(arguments["minimum_uid"], LDAPDB_UID_MAX, value)) {
-            pam_syslog(pamh, LOG_ERR, "minimum_uid=<%s> is not a valid uid "
-                       "(expected 0-%lu)", arguments["minimum_uid"].c_str(),
-                       LDAPDB_UID_MAX);
+        if (!parse_bounded_ulong(arguments["minimum_uid"], LDAPDB_UID_MAX,
+                                 value)) {
+            pam_syslog(pamh, LOG_ERR,
+                       "minimum_uid=<%s> is not a valid uid "
+                       "(expected 0-%lu)",
+                       arguments["minimum_uid"].c_str(), LDAPDB_UID_MAX);
             return PAM_SERVICE_ERR;
         }
-        minimum_uid = (uid_t) value;
+        minimum_uid = (uid_t)value;
     }
 
     // parse maximum_uid if given
     if (arguments.find("maximum_uid") != arguments.end()) {
         unsigned long value;
-        if (!parse_bounded_ulong(arguments["maximum_uid"], LDAPDB_UID_MAX, value)) {
-            pam_syslog(pamh, LOG_ERR, "maximum_uid=<%s> is not a valid uid "
-                       "(expected 0-%lu)", arguments["maximum_uid"].c_str(),
-                       LDAPDB_UID_MAX);
+        if (!parse_bounded_ulong(arguments["maximum_uid"], LDAPDB_UID_MAX,
+                                 value)) {
+            pam_syslog(pamh, LOG_ERR,
+                       "maximum_uid=<%s> is not a valid uid "
+                       "(expected 0-%lu)",
+                       arguments["maximum_uid"].c_str(), LDAPDB_UID_MAX);
             return PAM_SERVICE_ERR;
         }
-        maximum_uid = (uid_t) value;
+        maximum_uid = (uid_t)value;
     }
 
     // parse timeout if given
     if (arguments.find("timeout") != arguments.end()) {
         unsigned long value;
-        if (!parse_bounded_ulong(arguments["timeout"], LDAPDB_TIMEOUT_MAX, value) || value < 1) {
-            pam_syslog(pamh, LOG_ERR, "timeout=<%s> is not a valid duration (expected 1-%d seconds)",
-                       arguments["timeout"].c_str(), LDAPDB_TIMEOUT_MAX);
+        if (!parse_bounded_ulong(arguments["timeout"], LDAPDB_TIMEOUT_MAX,
+                                 value) ||
+            value < 1) {
+            pam_syslog(
+                pamh, LOG_ERR,
+                "timeout=<%s> is not a valid duration (expected 1-%d seconds)",
+                arguments["timeout"].c_str(), LDAPDB_TIMEOUT_MAX);
             return PAM_SERVICE_ERR;
         }
-        timeout_sec = (int) value;
+        timeout_sec = (int)value;
     }
 
     // validate uid against min value
     if (minimum_uid > pwd->pw_uid || maximum_uid < pwd->pw_uid) {
-        pam_syslog(pamh, LOG_NOTICE, "ldap authentication failure: "
+        pam_syslog(pamh, LOG_NOTICE,
+                   "ldap authentication failure: "
                    "uid out of range (%u <= %u <= %u)",
                    minimum_uid, pwd->pw_uid, maximum_uid);
         return PAM_AUTH_ERR;
@@ -327,15 +314,18 @@ static int authenticate_impl(pam_handle_t* pamh,
     // happily accept as anonymous and report as success, so it has to be caught
     // here rather than left to the server.
     if (std::strlen(pass) == 0) {
-        pam_syslog(pamh, LOG_NOTICE, "ldap authentication failure: "
-                   "empty password for user %s", user);
+        pam_syslog(pamh, LOG_NOTICE,
+                   "ldap authentication failure: "
+                   "empty password for user %s",
+                   user);
         return PAM_AUTH_ERR;
     }
 
     // the username is about to be spliced into the DN template, so make sure it
     // cannot rewrite the DN's structure
     if (!username_is_dn_safe(user)) {
-        pam_syslog(pamh, LOG_NOTICE, "ldap authentication failure: username "
+        pam_syslog(pamh, LOG_NOTICE,
+                   "ldap authentication failure: username "
                    "contains characters not permitted in a bind DN");
         return PAM_AUTH_ERR;
     }
@@ -347,19 +337,16 @@ static int authenticate_impl(pam_handle_t* pamh,
     // check against ldap database
     ret = verify(arguments["uri"].c_str(), binddn.c_str(), pass, timeout_sec);
     if (ret != PAM_SUCCESS) {
-        pam_syslog(pamh, LOG_NOTICE, "ldap authentication failure: "
+        pam_syslog(pamh, LOG_NOTICE,
+                   "ldap authentication failure: "
                    "user=<%s> uri=<%s> binddn=<%s>",
                    user, arguments["uri"].c_str(), binddn.c_str());
     }
     return ret;
 }
 
-
-PAM_EXTERN int pam_sm_authenticate(pam_handle_t* pamh,
-                                   int /* flags */,
-                                   int argc,
-                                   const char** argv)
-{
+PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int /* flags */,
+                                   int argc, const char **argv) {
     /* libpam calls this from C. Letting an exception unwind out of here is
      * undefined behaviour and in practice reaches std::terminate, killing
      * whatever was authenticating -- sshd, the display manager, a screen
@@ -375,11 +362,7 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t* pamh,
     }
 }
 
-
-PAM_EXTERN int pam_sm_setcred(pam_handle_t* /* pamh */,
-                              int /* flags */,
-                              int /* argc */,
-                              const char** /* argv */)
-{
+PAM_EXTERN int pam_sm_setcred(pam_handle_t * /* pamh */, int /* flags */,
+                              int /* argc */, const char ** /* argv */) {
     return PAM_SUCCESS;
 }
