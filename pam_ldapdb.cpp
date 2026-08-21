@@ -19,6 +19,10 @@ typedef std::map<std::string, std::string> ArgMap;
 #define LDAPDB_TIMEOUT_DEFAULT 10
 #define LDAPDB_TIMEOUT_MAX     3600
 
+/* Largest value uid_t can hold, as an unsigned long, for range-checking before
+ * the narrowing cast. */
+#define LDAPDB_UID_MAX ((unsigned long) (uid_t) -1)
+
 static int ldap_to_pam_rc(int ldap_rc)
 {
     switch (ldap_rc) {
@@ -97,23 +101,79 @@ static int verify(const char* host,
 }
 
 
-static ArgMap get_args(int argc,
+/* Accept a non-empty run of decimal digits and nothing else, and only a result
+ * that fits the caller's ceiling. */
+static bool parse_bounded_ulong(const std::string& in,
+                                unsigned long max,
+                                unsigned long& out)
+{
+    if (in.empty() || in.find_first_not_of("0123456789") != std::string::npos)
+        return false;
+
+    try {
+        unsigned long value = std::stoul(in);
+        if (value > max)
+            return false;
+        out = value;
+    } catch (const std::exception&) {
+        return false;
+    }
+
+    return true;
+}
+
+
+static bool is_libpam_flag(const std::string& arg)
+{
+    return arg == "use_first_pass" || arg == "try_first_pass";
+}
+
+
+/* Every option the module understands, plus authtok_type, which pam_get_authtok
+ * consumes the same way. Anything else on the PAM line is ignored, which used
+ * to make a typo indistinguishable from a correct option -- "bindn=" simply
+ * vanished and the module then reported "unable to find BINDDN". */
+static bool is_known_key(const std::string& key)
+{
+    return key == "uri"         || key == "binddn" ||
+           key == "minimum_uid" || key == "maximum_uid" ||
+           key == "timeout"     || key == "authtok_type";
+}
+
+
+static ArgMap get_args(pam_handle_t* pamh,
+                       int argc,
                        const char** argv)
 {
     ArgMap arguments;
 
     for (int i = 0; i < argc; i++) {
         std::string arg(argv[i]);
-        std::string::size_type pos = arg.find("=");
-        if (pos != std::string::npos) {
-            std::string key = arg.substr(0, pos);
-            std::string value = "";
+        std::string::size_type pos = arg.find('=');
 
-            if (arg.length() > pos+1) {
-                value = arg.substr(pos+1);
-            }
+        if (pos == std::string::npos) {
+            if (!is_libpam_flag(arg))
+                pam_syslog(pamh, LOG_WARNING,
+                           "ignoring argument with no '=': <%s>", arg.c_str());
+            continue;
+        }
 
-            arguments.insert(std::make_pair(key, value));
+        std::string key = arg.substr(0, pos);
+        std::string value = "";
+
+        if (arg.length() > pos+1) {
+            value = arg.substr(pos+1);
+        }
+
+        if (!is_known_key(key)) {
+            pam_syslog(pamh, LOG_WARNING,
+                       "ignoring unrecognised option <%s>", key.c_str());
+            continue;
+        }
+
+        if (!arguments.insert(std::make_pair(key, value)).second) {
+            pam_syslog(pamh, LOG_WARNING, "duplicate option <%s>: keeping the "
+                       "first value, ignoring this one", key.c_str());
         }
     }
 
@@ -125,17 +185,57 @@ static void replace_all(std::string& s,
                         const std::string& search_s,
                         const std::string& replace_s)
 {
+    if (search_s.empty())
+        return;
+
     std::string::size_type last_pos = 0;
     while ((last_pos = s.find(search_s, last_pos)) != std::string::npos) {
         s.replace(last_pos, search_s.length(), replace_s);
+        last_pos += replace_s.length();
     }
 }
 
 
-PAM_EXTERN int pam_sm_authenticate(pam_handle_t* pamh,
-                                   int /* flags */,
-                                   int argc,
-                                   const char** argv)
+/* The username is spliced into the binddn template, so a name carrying DN
+ * metacharacters rewrites the structure of the distinguished name rather than
+ * just its value: "bob,dc=evil" turns uid=%s,dc=x into uid=bob,dc=evil,dc=x,
+ * and "bob+uid=root" builds a multi-valued RDN. Either controls which entry the
+ * password is checked against.
+ *
+ * Reject rather than escape.
+ *
+ * Permitted: ASCII alphanumerics, "._-@$%", and any byte >= 0x80. Every RFC
+ * 4514 special is ASCII, and UTF-8 continuation bytes are all >= 0x80, so
+ * admitting the high range keeps non-ASCII usernames working without admitting
+ * a metacharacter. This also excludes leading/trailing space, a leading '#',
+ * and every control character, all of which are significant in a DN.
+ *
+ * '%' is deliberately allowed: it is not special in a DN, and here the username
+ * is only ever the replacement text, never rescanned as a template. */
+static bool username_is_dn_safe(const char* user)
+{
+    if (*user == '\0')
+        return false;
+
+    for (const unsigned char* p = (const unsigned char*) user; *p; p++) {
+        if (*p >= 0x80)
+            continue;
+        if ((*p >= 'A' && *p <= 'Z') || (*p >= 'a' && *p <= 'z') ||
+            (*p >= '0' && *p <= '9'))
+            continue;
+        if (*p == '.' || *p == '_' || *p == '-' ||
+            *p == '@' || *p == '$' || *p == '%')
+            continue;
+        return false;
+    }
+
+    return true;
+}
+
+
+static int authenticate_impl(pam_handle_t* pamh,
+                             int argc,
+                             const char** argv)
 {
     const char* user;
     const char* pass;
@@ -144,7 +244,7 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t* pamh,
     int timeout_sec = LDAPDB_TIMEOUT_DEFAULT;
     struct passwd *pwd;
     int ret;
-    ArgMap arguments = get_args(argc, argv);
+    ArgMap arguments = get_args(pamh, argc, argv);
 
     ret = pam_get_user(pamh, &user, NULL);
     if (ret != PAM_SUCCESS) {
@@ -159,8 +259,18 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t* pamh,
     // ensure uri and binddn PAM parameters were specified
     if (arguments.find("uri") == arguments.end() ||
         arguments.find("binddn") == arguments.end()) {
-        pam_syslog(pamh, LOG_NOTICE, "unable to find URI and/or BINDDN");
-        return PAM_AUTH_ERR;
+        pam_syslog(pamh, LOG_ERR, "unable to find URI and/or BINDDN");
+        return PAM_SERVICE_ERR;
+    }
+
+    if (arguments["uri"].empty() || arguments["binddn"].empty()) {
+        pam_syslog(pamh, LOG_ERR, "uri and binddn must not be empty");
+        return PAM_SERVICE_ERR;
+    }
+
+    if (arguments["binddn"].find("%s") == std::string::npos) {
+        pam_syslog(pamh, LOG_ERR, "binddn contains no %%s placeholder");
+        return PAM_SERVICE_ERR;
     }
 
     // get passwd entry for desired user. This is required for UID checking.
@@ -172,47 +282,37 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t* pamh,
 
     // parse minimum_uid if given
     if (arguments.find("minimum_uid") != arguments.end()) {
-        try {
-            minimum_uid = (uid_t) std::stoul(arguments["minimum_uid"]);
-        } catch (const std::invalid_argument &ex) {
-            pam_syslog(pamh, LOG_ERR, "the given minimum_uid is invalid!");
-            return PAM_AUTH_ERR;
-        } catch (const std::out_of_range &ex) {
-            pam_syslog(pamh, LOG_ERR, "the given minimum_uid is out of range!");
-            return PAM_AUTH_ERR;
+        unsigned long value;
+        if (!parse_bounded_ulong(arguments["minimum_uid"], LDAPDB_UID_MAX, value)) {
+            pam_syslog(pamh, LOG_ERR, "minimum_uid=<%s> is not a valid uid "
+                       "(expected 0-%lu)", arguments["minimum_uid"].c_str(),
+                       LDAPDB_UID_MAX);
+            return PAM_SERVICE_ERR;
         }
+        minimum_uid = (uid_t) value;
     }
 
     // parse maximum_uid if given
     if (arguments.find("maximum_uid") != arguments.end()) {
-        try {
-            maximum_uid = (uid_t) std::stoul(arguments["maximum_uid"]);
-        } catch (const std::invalid_argument &ex) {
-            pam_syslog(pamh, LOG_ERR, "the given maximum_uid is invalid!");
-            return PAM_AUTH_ERR;
-        } catch (const std::out_of_range &ex) {
-            pam_syslog(pamh, LOG_ERR, "the given maximum_uid is out of range!");
-            return PAM_AUTH_ERR;
+        unsigned long value;
+        if (!parse_bounded_ulong(arguments["maximum_uid"], LDAPDB_UID_MAX, value)) {
+            pam_syslog(pamh, LOG_ERR, "maximum_uid=<%s> is not a valid uid "
+                       "(expected 0-%lu)", arguments["maximum_uid"].c_str(),
+                       LDAPDB_UID_MAX);
+            return PAM_SERVICE_ERR;
         }
+        maximum_uid = (uid_t) value;
     }
 
     // parse timeout if given
     if (arguments.find("timeout") != arguments.end()) {
-        const std::string& raw = arguments["timeout"];
-        try {
-            std::string::size_type pos = 0;
-            unsigned long value = std::stoul(raw, &pos);
-            if (pos != raw.length() || value < 1 || value > LDAPDB_TIMEOUT_MAX)
-                throw std::out_of_range("timeout");
-            timeout_sec = (int) value;
-        } catch (const std::invalid_argument &ex) {
-            pam_syslog(pamh, LOG_ERR, "the given timeout is invalid!");
-            return PAM_SERVICE_ERR;
-        } catch (const std::out_of_range &ex) {
-            pam_syslog(pamh, LOG_ERR, "the given timeout is out of range "
-                       "(expected 1-%d seconds)!", LDAPDB_TIMEOUT_MAX);
+        unsigned long value;
+        if (!parse_bounded_ulong(arguments["timeout"], LDAPDB_TIMEOUT_MAX, value) || value < 1) {
+            pam_syslog(pamh, LOG_ERR, "timeout=<%s> is not a valid duration (expected 1-%d seconds)",
+                       arguments["timeout"].c_str(), LDAPDB_TIMEOUT_MAX);
             return PAM_SERVICE_ERR;
         }
+        timeout_sec = (int) value;
     }
 
     // validate uid against min value
@@ -232,6 +332,14 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t* pamh,
         return PAM_AUTH_ERR;
     }
 
+    // the username is about to be spliced into the DN template, so make sure it
+    // cannot rewrite the DN's structure
+    if (!username_is_dn_safe(user)) {
+        pam_syslog(pamh, LOG_NOTICE, "ldap authentication failure: username "
+                   "contains characters not permitted in a bind DN");
+        return PAM_AUTH_ERR;
+    }
+
     // parse & prepare binddn
     std::string binddn = arguments["binddn"];
     replace_all(binddn, "%s", user);
@@ -244,6 +352,27 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t* pamh,
                    user, arguments["uri"].c_str(), binddn.c_str());
     }
     return ret;
+}
+
+
+PAM_EXTERN int pam_sm_authenticate(pam_handle_t* pamh,
+                                   int /* flags */,
+                                   int argc,
+                                   const char** argv)
+{
+    /* libpam calls this from C. Letting an exception unwind out of here is
+     * undefined behaviour and in practice reaches std::terminate, killing
+     * whatever was authenticating -- sshd, the display manager, a screen
+     * locker, etc. */
+    try {
+        return authenticate_impl(pamh, argc, argv);
+    } catch (const std::exception &ex) {
+        pam_syslog(pamh, LOG_CRIT, "internal error: %s", ex.what());
+        return PAM_SERVICE_ERR;
+    } catch (...) {
+        pam_syslog(pamh, LOG_CRIT, "internal error: unknown exception");
+        return PAM_SERVICE_ERR;
+    }
 }
 
 

@@ -30,6 +30,24 @@ connecting user. For example, if given `binddn=uid=%s,dc=my,dc=ldap,dc=server`
 and the user `bob` is connecting then the new string will become
 `uid=bob,dc=my,dc=ldap,dc=server`.
 
+Both `uri` and `binddn` must be present and non-empty. `binddn` must
+contain at least one `%s`.
+
+Options are `uri`, `binddn`, `minimum_uid`, `maximum_uid` and `timeout`.
+Anything else is ignored and logged, so a typo such as `bindn=` no longer
+disappears silently. If the same option is given twice then the first occurrence
+wins and the duplicate is logged. The `use_first_pass`, `try_first_pass`, and
+`authtok_type=` flags are read by libpam itself rather than by this module, and
+pass through without comment.
+
+The username is substituted into the template literally, so it must not contain
+characters that are significant in a distinguished name. Names made of letters,
+digits and `. _ - @ $ %` are accepted; anything else - notably `, + " \ < > ; =`,
+a leading `#`, leading or trailing spaces, and control characters - is refused with
+`PAM_AUTH_ERR` and logged. Such a name would otherwise rewrite the structure of
+the DN rather than just filling in its value, changing which directory entry the
+password is checked against.
+
 Modify `/etc/pam.d/*` to match your setup:
 
     auth sufficient pam_ldapdb.so uri=ldap://example.com binddn=uid=%s,dc=example,dc=com
@@ -48,7 +66,7 @@ make sure the desired user is available locally with a locked password (use:
 the following example:
 
 	auth    sufficient      pam_unix.so     nullok_secure
-	auth    [success=3 default=2 authinfo_unavail=ignore]      pam_ldapdb.so ldap://example.com binddn=uid=%s,dc=example,dc=com
+	auth    [success=3 default=2 authinfo_unavail=ignore]      pam_ldapdb.so uri=ldap://example.com binddn=uid=%s,dc=example,dc=com
 	auth    [success=2 default=ignore]                         pam_ccreds.so action=validate use_first_pass
 	auth    [default=ignore]                                   pam_ccreds.so action=update
 	auth    requisite       pam_deny.so
