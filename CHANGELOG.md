@@ -6,6 +6,8 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-08-22
+
 ### Security
 
 - Reject usernames containing DN metacharacters to prevent changes to the
