@@ -6,10 +6,12 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-11-25
+
 ### Fixed
 
 - Include `<sys/time.h>` explicitly for `struct timeval`, fixing the build
-  with musl libc.
+  with musl libc. ([#15])
 
 ## [2.0.0] - 2026-08-22
 
@@ -128,8 +130,10 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 [#12]: https://github.com/smackysnacks/pam_ldapdb/pull/12
 [#13]: https://github.com/smackysnacks/pam_ldapdb/pull/13
 [#14]: https://github.com/smackysnacks/pam_ldapdb/pull/14
+[#15]: https://github.com/smackysnacks/pam_ldapdb/pull/15
 
-[unreleased]: https://github.com/smackysnacks/pam_ldapdb/compare/v2.0.0...HEAD
+[unreleased]: https://github.com/smackysnacks/pam_ldapdb/compare/v2.0.1...HEAD
+[2.0.1]: https://github.com/smackysnacks/pam_ldapdb/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/smackysnacks/pam_ldapdb/compare/v1.3.1...v2.0.0
 [1.3.1]: https://github.com/smackysnacks/pam_ldapdb/compare/v1.3...v1.3.1
 [1.3]: https://github.com/smackysnacks/pam_ldapdb/compare/v1.2...v1.3
