@@ -3,6 +3,7 @@
 #include <pwd.h>
 #include <stdexcept>
 #include <string>
+#include <sys/time.h>
 #include <syslog.h>
 #include <utility>
 
