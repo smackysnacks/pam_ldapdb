@@ -1,0 +1,8 @@
+version: 2
+updates:
+  # Bumps `uses:` refs in workflows and regenerates the matching entries in
+  # .github/workflows/actions.lock in the same pull request.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
